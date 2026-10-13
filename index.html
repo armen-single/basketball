@@ -33,7 +33,7 @@
 </head>
 <body>
 <div id="score">Счёт: 0</div>
-<div id="hint">Тяни палец ↓</div>
+<div id="hint">Тяни от мяча ↓</div>
 <canvas id="c"></canvas>
 
 <script>
@@ -46,26 +46,26 @@ function resize() {
   H = canvas.height = window.innerHeight;
 }
 resize();
-window.addEventListener('resize', () => { resize(); setHoop(); });
+window.addEventListener('resize', () => { resize(); setHoop(); resetBall(); });
 
 const hoop = { x: 0, y: 0, r: 35 };
 function setHoop() {
   hoop.x = W - 90;
-  hoop.y = H * 0.35;
+  hoop.y = H * 0.25;   // кольцо чуть выше
   hoop.r = Math.min(35, W * 0.06);
 }
 
 let ball = { x: 0, y: 0, r: 18, vx: 0, vy: 0, flying: false };
 function resetBall() {
   ball.x = W * 0.15;
-  ball.y = H - 90;
+  ball.y = H * 0.55;   // ⬆️ мяч теперь на середине высоты
   ball.r = Math.min(18, W * 0.035);
   ball.vx = 0;
   ball.vy = 0;
   ball.flying = false;
 }
 
-const gravity = 0.6;
+const gravity = 0.5;   // чуть легче гравитация
 let score = 0;
 const scoreEl = document.getElementById('score');
 let aiming = false;
@@ -214,4 +214,4 @@ setHoop();
 loop();
 </script>
 </body>
-  </html>
+</html>
