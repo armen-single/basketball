@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🏀 Баскетбол — играй онлайн!</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { 
+    width: 100%; height: 100%; 
+    overflow: hidden; 
+    touch-action: none; 
+    background: #87CEEB;
+    font-family: Arial, sans-serif;
+    user-select: none;
+  }
+  canvas { display: block; touch-action: none; }
+  #score {
+    position: fixed; top: 15px; left: 15px;
+    font: bold 28px Arial; color: #000;
+    text-shadow: 2px 2px 0 #fff;
+    pointer-events: none;
+  }
+  #hint {
+    position: fixed; top: 15px; right: 15px;
+    font: bold 14px Arial; color: #000;
+    text-shadow: 1px 1px 0 #fff;
+    background: rgba(255,255,255,0.6);
+    padding: 6px 10px; border-radius: 8px;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="score">Счёт: 0</div>
+<div id="hint">Тяни палец ↓</div>
+<canvas id="c"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', () => { resize(); setHoop(); });
+
+const hoop = { x: 0, y: 0, r: 35 };
+function setHoop() {
+  hoop.x = W - 90;
+  hoop.y = H * 0.35;
+  hoop.r = Math.min(35, W * 0.06);
+}
+
+let ball = { x: 0, y: 0, r: 18, vx: 0, vy: 0, flying: false };
+function resetBall() {
+  ball.x = W * 0.15;
+  ball.y = H - 90;
+  ball.r = Math.min(18, W * 0.035);
+  ball.vx = 0;
+  ball.vy = 0;
+  ball.flying = false;
+}
+
+const gravity = 0.6;
+let score = 0;
+const scoreEl = document.getElementById('score');
+let aiming = false;
+let aimStart = { x: 0, y: 0 };
+let aimEnd = { x: 0, y: 0 };
+
+function getPos(e) {
+  const t = e.touches ? e.touches[0] : e;
+  return { x: t.clientX, y: t.clientY };
+}
+function onDown(e) {
+  e.preventDefault();
+  if (ball.flying) return;
+  const p = getPos(e);
+  aiming = true;
+  aimStart = { x: ball.x, y: ball.y };
+  aimEnd = p;
+}
+function onMove(e) {
+  e.preventDefault();
+  if (!aiming) return;
+  aimEnd = getPos(e);
+}
+function onUp(e) {
+  e.preventDefault();
+  if (!aiming) return;
+  aiming = false;
+  const dx = aimStart.x - aimEnd.x;
+  const dy = aimStart.y - aimEnd.y;
+  const power = 0.18;
+  ball.vx = dx * power;
+  ball.vy = dy * power;
+  ball.flying = true;
+}
+
+canvas.addEventListener('mousedown', onDown);
+canvas.addEventListener('mousemove', onMove);
+canvas.addEventListener('mouseup', onUp);
+canvas.addEventListener('touchstart', onDown, { passive: false });
+canvas.addEventListener('touchmove', onMove, { passive: false });
+canvas.addEventListener('touchend', onUp, { passive: false });
+
+let scoredThisThrow = false;
+
+function update() {
+  if (ball.flying) {
+    ball.vy += gravity;
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+
+    const floor = H - 40;
+    if (ball.y > floor - ball.r) {
+      ball.y = floor - ball.r;
+      ball.vy *= -0.55;
+      ball.vx *= 0.8;
+    }
+    if (ball.x < ball.r) { ball.x = ball.r; ball.vx *= -0.7; }
+    if (ball.x > W - ball.r) { ball.x = W - ball.r; ball.vx *= -0.7; }
+
+    const dxh = ball.x - hoop.x;
+    const dyh = ball.y - hoop.y;
+    if (!scoredThisThrow && Math.abs(dxh) < hoop.r * 0.8 && dyh > -5 && dyh < 25 && ball.vy > 0) {
+      score++;
+      scoreEl.textContent = "Счёт: " + score;
+      scoredThisThrow = true;
+    }
+
+    if (Math.abs(ball.vx) < 0.3 && Math.abs(ball.vy) < 0.3 &&
+        ball.y >= floor - ball.r - 1) {
+      resetBall();
+      scoredThisThrow = false;
+    }
+  }
+}
+
+function draw() {
+  ctx.fillStyle = '#87CEEB';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = '#228B22';
+  ctx.fillRect(0, H - 40, W, 40);
+
+  ctx.strokeStyle = '#666';
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.moveTo(hoop.x + hoop.r + 8, hoop.y);
+  ctx.lineTo(hoop.x + hoop.r + 8, H - 40);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#DC143C';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(hoop.x, hoop.y, hoop.r, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  for (let i = -hoop.r + 8; i < hoop.r; i += 10) {
+    ctx.beginPath();
+    ctx.moveTo(hoop.x + i, hoop.y + hoop.r * 0.5);
+    ctx.lineTo(hoop.x + i * 0.4, hoop.y + hoop.r * 1.4);
+    ctx.stroke();
+  }
+
+  if (aiming) {
+    const dx = aimStart.x - aimEnd.x;
+    const dy = aimStart.y - aimEnd.y;
+    const power = 0.18;
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    for (let t = 0; t < 40; t++) {
+      const px = aimStart.x + dx * power * t;
+      const py = aimStart.y + dy * power * t + 0.5 * gravity * t * t;
+      if (px > 0 && px < W && py > 0 && py < H) {
+        ctx.beginPath();
+        ctx.arc(px, py, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  ctx.fillStyle = '#FF8C00';
+  ctx.beginPath();
+  ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(ball.x - ball.r, ball.y);
+  ctx.lineTo(ball.x + ball.r, ball.y);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(ball.x, ball.y - ball.r * 0.5, ball.r * 0.7, 0, Math.PI);
+  ctx.stroke();
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+resetBall();
+setHoop();
+loop();
+</script>
+</body>
+  </html>
