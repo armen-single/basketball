@@ -26,9 +26,14 @@
     text-shadow: 2px 2px 0 #000;
     pointer-events: none;
   }
+  #backBtn {
+    position: fixed; bottom: 15px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+  }
   .screen {
     position: fixed; inset: 0;
-    background: rgba(0,0,0,0.75);
+    background: rgba(0,0,0,0.8);
     color: #fff;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
@@ -36,10 +41,11 @@
     text-align: center;
     overflow-y: auto;
     font-family: Arial, sans-serif;
+    z-index: 5;
   }
   .hidden { display: none !important; }
-  h1 { font-size: 32px; margin-bottom: 15px; }
-  h2 { font-size: 22px; margin: 15px 0 8px; }
+  h1 { font-size: 30px; margin-bottom: 15px; }
+  h2 { font-size: 20px; margin: 15px 0 8px; }
   button {
     background: #ff8c00; color: #fff;
     border: none; border-radius: 10px;
@@ -52,6 +58,7 @@
   button:active { transform: translateY(2px); box-shadow: 0 1px 0 #b35c00; }
   button.green { background: #28a745; box-shadow: 0 3px 0 #1c7a33; }
   button.gray { background: #666; box-shadow: 0 3px 0 #333; }
+  button.red { background: #dc3545; box-shadow: 0 3px 0 #8a1c27; }
   .row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
   .card {
     background: rgba(255,255,255,0.1);
@@ -67,12 +74,20 @@
   .card.locked { opacity: 0.4; cursor: not-allowed; }
   .card .name { font-weight: bold; font-size: 15px; }
   .card .info { font-size: 12px; opacity: 0.8; margin-top: 4px; }
-  .score-list { font-size: 18px; line-height: 1.6; margin: 10px 0; }
+  .score-list { font-size: 18px; line-height: 1.8; margin: 10px 0; min-width: 250px; }
   .score-list .me { color: #ffd700; font-weight: bold; }
+  .score-list .row-item {
+    display: flex; justify-content: space-between;
+    padding: 6px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+  }
+  .score-list .place { width: 40px; text-align: left; }
+  .score-list .name { flex: 1; text-align: left; }
+  .score-list .pts { text-align: right; }
   input {
-    padding: 10px; border-radius: 8px;
+    padding: 12px; border-radius: 8px;
     border: none; font-size: 18px;
-    text-align: center; width: 200px;
+    text-align: center; width: 220px;
     margin: 10px;
   }
   .preview {
@@ -81,18 +96,30 @@
     margin: 0 auto 6px;
     border: 2px solid #000;
   }
+  .welcome-text { font-size: 16px; margin-bottom: 10px; opacity: 0.9; }
 </style>
 </head>
 <body>
 <div id="hud" class="hidden">Счёт: 0</div>
 <div id="timer" class="hidden"></div>
+<button id="backBtn" class="gray hidden" onclick="backToMenu()">🏠 В меню</button>
 <canvas id="c"></canvas>
 
+<!-- Экран регистрации -->
+<div id="register" class="screen hidden">
+  <h1>🏀 Добро пожаловать!</h1>
+  <p class="welcome-text">Введи своё имя для таблицы лидеров</p>
+  <input id="regName" maxlength="12" placeholder="Имя" autofocus>
+  <br>
+  <button class="green" onclick="doRegister()">Начать играть</button>
+</div>
+
 <!-- Стартовый экран -->
-<div id="menu" class="screen">
+<div id="menu" class="screen hidden">
   <h1>🏀 Баскетбол</h1>
+  <p class="welcome-text">Привет, <b id="helloName">Игрок</b>!</p>
   <p style="margin-bottom: 10px;">Рекорд: <b id="bestScore">0</b> очков</p>
-  <button class="green" onclick="startGame('match')">⏱️ Матч (60 сек)</button>
+  <button class="green" onclick="startGame('match')">⏱️ Матч (80 сек)</button>
   <button onclick="startGame('train')">🎯 Тренировка</button>
   <button class="gray" onclick="openShop()">🎨 Мячи и площадки</button>
   <button class="gray" onclick="openLeaders()">🏆 Таблица лидеров</button>
@@ -103,14 +130,11 @@
   <h1 id="goTitle">Игра окончена!</h1>
   <p style="font-size: 22px; margin: 10px;">Твой счёт: <b id="goScore">0</b></p>
   <p style="margin: 10px; opacity: 0.8;">Рекорд: <b id="goBest">0</b></p>
-  <div id="nameBlock">
-    <p>🎉 Новый рекорд! Введи имя:</p>
-    <input id="playerName" maxlength="12" placeholder="Имя">
-    <br>
-    <button class="green" onclick="saveLeader()">Сохранить</button>
+  <div id="saveScoreBlock">
+    <button class="green" onclick="saveToLeaders()">💾 Сохранить в таблицу</button>
   </div>
-  <button class="green" onclick="location.reload()">🏠 В меню</button>
   <button onclick="startGame(currentMode)">🔄 Ещё раз</button>
+  <button class="gray" onclick="backToMenu()">🏠 В меню</button>
 </div>
 
 <!-- Магазин -->
@@ -143,27 +167,29 @@ window.addEventListener('resize', () => { resize(); setHoop(); if (!ball.flying)
 
 // ---------- ПРОГРЕСС ----------
 const save = {
-  totalScore: 0,       // общий счёт за всё время
-  bestScore: 0,        // лучший результат за матч
-  ball: 'basket',      // текущий мяч
-  court: 'park',       // текущая площадка
-  leaders: [],         // топ результатов
+  playerName: '',
+  totalScore: 0,
+  bestScore: 0,
+  ball: 'basket',
+  court: 'park',
+  leaders: [],
   unlocked: { basket: true, football: false, beach: false }
 };
 
 function loadSave() {
   try {
-    const raw = localStorage.getItem('basketball_save');
+    const raw = localStorage.getItem('basketball_save_v2');
     if (raw) {
       const parsed = JSON.parse(raw);
       Object.assign(save, parsed);
       if (!save.unlocked) save.unlocked = { basket: true, football: false, beach: false };
+      if (!Array.isArray(save.leaders)) save.leaders = [];
     }
   } catch(e) {}
 }
 
 function writeSave() {
-  try { localStorage.setItem('basketball_save', JSON.stringify(save)); } catch(e) {}
+  try { localStorage.setItem('basketball_save_v2', JSON.stringify(save)); } catch(e) {}
 }
 
 function checkUnlock() {
@@ -180,21 +206,20 @@ function checkUnlock() {
 
 loadSave();
 
-// ---------- МЯЧИ ----------
+// ---------- МЯЧИ И ПЛОЩАДКИ ----------
 const BALLS = {
   basket:   { name: 'Баскетбольный', colors: ['#FF8C00', '#000000'], require: 0 },
   football: { name: 'Футбольный',    colors: ['#FFFFFF', '#000000'], require: 100 },
   beach:    { name: 'Пляжный',       colors: ['#FFD700', '#FF4500'], require: 165 }
 };
 
-// ---------- ПЛОЩАДКИ ----------
 const COURTS = {
-  park:    { name: 'Парк',     sky: '#87CEEB', floor: '#228B22', rim: '#DC143C', hint: 'Зелёный парк' },
-  stadium: { name: 'Стадион',  sky: '#4A90D9', floor: '#8B4513', rim: '#FF4500', hint: 'Трибуны вокруг' },
-  night:   { name: 'Ночь',     sky: '#0B1026', floor: '#1a1a2e', rim: '#FFD700', hint: 'Звёздное небо' }
+  park:    { name: 'Парк',    sky: '#87CEEB', floor: '#228B22', rim: '#DC143C' },
+  stadium: { name: 'Стадион', sky: '#4A90D9', floor: '#8B4513', rim: '#FF4500' },
+  night:   { name: 'Ночь',    sky: '#0B1026', floor: '#1a1a2e', rim: '#FFD700' }
 };
 
-// ---------- КОЛЬЦО ----------
+// ---------- КОЛЬЦО И МЯЧ ----------
 const hoop = { x: 0, y: 0, r: 35 };
 function setHoop() {
   hoop.x = W - 90;
@@ -202,7 +227,6 @@ function setHoop() {
   hoop.r = Math.min(35, W * 0.06);
 }
 
-// ---------- МЯЧ ----------
 let ball = { x: 0, y: 0, r: 18, vx: 0, vy: 0, flying: false };
 function resetBall() {
   ball.x = W * 0.15;
@@ -217,9 +241,10 @@ const gravity = 0.5;
 let score = 0;
 let mode = 'menu';
 let currentMode = 'match';
-let timeLeft = 60;
+let timeLeft = 80;
 let timerInterval = null;
 let confetti = [];
+let scoreSaved = false;
 
 const hudEl = document.getElementById('hud');
 const timerEl = document.getElementById('timer');
@@ -227,6 +252,8 @@ const menuEl = document.getElementById('menu');
 const goEl = document.getElementById('gameover');
 const shopEl = document.getElementById('shop');
 const leadersEl = document.getElementById('leaders');
+const registerEl = document.getElementById('register');
+const backBtn = document.getElementById('backBtn');
 
 let aiming = false;
 let aimStart = { x: 0, y: 0 };
@@ -268,7 +295,7 @@ canvas.addEventListener('touchstart', onDown, { passive: false });
 canvas.addEventListener('touchmove', onMove, { passive: false });
 canvas.addEventListener('touchend', onUp, { passive: false });
 
-// ---------- ЧАСТИЦЫ КОНФЕТТИ ----------
+// ---------- КОНФЕТТИ ----------
 function spawnConfetti(x, y) {
   const colors = ['#FF4500', '#FFD700', '#32CD32', '#1E90FF', '#FF69B4', '#FFFFFF', '#FF8C00'];
   for (let i = 0; i < 60; i++) {
@@ -288,12 +315,8 @@ function spawnConfetti(x, y) {
 function updateConfetti() {
   for (let i = confetti.length - 1; i >= 0; i--) {
     const p = confetti[i];
-    p.x += p.vx;
-    p.y += p.vy;
-    p.vy += 0.4;
-    p.vx *= 0.99;
-    p.rot += p.rotSpeed;
-    p.life--;
+    p.x += p.vx; p.y += p.vy; p.vy += 0.4; p.vx *= 0.99;
+    p.rot += p.rotSpeed; p.life--;
     if (p.life <= 0 || p.y > H + 50) confetti.splice(i, 1);
   }
 }
@@ -301,12 +324,43 @@ function updateConfetti() {
 function drawConfetti() {
   for (const p of confetti) {
     ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(p.rot);
+    ctx.translate(p.x, p.y); ctx.rotate(p.rot);
     ctx.fillStyle = p.color;
     ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size * 0.6);
     ctx.restore();
   }
+}
+
+// ---------- РЕГИСТРАЦИЯ ----------
+function showRegister() {
+  registerEl.classList.remove('hidden');
+  menuEl.classList.add('hidden');
+}
+
+function doRegister() {
+  const name = document.getElementById('regName').value.trim();
+  if (!name || name.length < 2) {
+    alert('Введи имя (минимум 2 символа)');
+    return;
+  }
+  save.playerName = name;
+  writeSave();
+  registerEl.classList.add('hidden');
+  showMenu();
+}
+
+function showMenu() {
+  mode = 'menu';
+  menuEl.classList.remove('hidden');
+  goEl.classList.add('hidden');
+  shopEl.classList.add('hidden');
+  leadersEl.classList.add('hidden');
+  registerEl.classList.add('hidden');
+  hudEl.classList.add('hidden');
+  timerEl.classList.add('hidden');
+  backBtn.classList.add('hidden');
+  document.getElementById('helloName').textContent = save.playerName;
+  updateBest();
 }
 
 // ---------- ИГРА ----------
@@ -314,8 +368,9 @@ function startGame(m) {
   currentMode = m;
   mode = 'play';
   score = 0;
-  timeLeft = 60;
+  timeLeft = 80;
   confetti = [];
+  scoreSaved = false;
   menuEl.classList.add('hidden');
   goEl.classList.add('hidden');
   shopEl.classList.add('hidden');
@@ -325,7 +380,8 @@ function startGame(m) {
 
   if (m === 'match') {
     timerEl.classList.remove('hidden');
-    timerEl.textContent = '⏱️ 60';
+    timerEl.textContent = '⏱️ 80';
+    backBtn.classList.add('hidden');
     clearInterval(timerInterval);
     timerInterval = setInterval(() => {
       timeLeft--;
@@ -333,12 +389,25 @@ function startGame(m) {
       if (timeLeft <= 0) endGame();
     }, 1000);
   } else {
+    // Тренировка
     timerEl.classList.add('hidden');
     clearInterval(timerInterval);
+    backBtn.classList.remove('hidden');
   }
 
   resetBall();
   setHoop();
+}
+
+function backToMenu() {
+  clearInterval(timerInterval);
+  mode = 'menu';
+  if (currentMode === 'train' && score > 0) {
+    save.totalScore += score;
+    checkUnlock();
+    writeSave();
+  }
+  showMenu();
 }
 
 function endGame() {
@@ -346,43 +415,36 @@ function endGame() {
   clearInterval(timerInterval);
   hudEl.classList.add('hidden');
   timerEl.classList.add('hidden');
+  backBtn.classList.add('hidden');
   goEl.classList.remove('hidden');
   document.getElementById('goScore').textContent = score;
 
   const isNewBest = score > save.bestScore;
-  if (isNewBest) {
-    save.bestScore = score;
-  }
+  if (isNewBest) save.bestScore = score;
   document.getElementById('goBest').textContent = save.bestScore;
 
-  const nameBlock = document.getElementById('nameBlock');
-  if (score > 0 && isNewBest) {
-    nameBlock.classList.remove('hidden');
+  scoreSaved = false;
+  if (score > 0) {
+    document.getElementById('saveScoreBlock').classList.remove('hidden');
   } else {
-    nameBlock.classList.add('hidden');
+    document.getElementById('saveScoreBlock').classList.add('hidden');
   }
 
+  // начисляем общий счёт
+  save.totalScore += score;
   writeSave();
-  // разблокировка скинов
-  const beforeFootball = save.unlocked.football;
-  const beforeBeach = save.unlocked.beach;
   checkUnlock();
-  if (!beforeFootball && save.unlocked.football) {
-    setTimeout(() => alert('⚽ Открыт футбольный мяч! 100 очков набрано.'), 1000);
-  }
-  if (!beforeBeach && save.unlocked.beach) {
-    setTimeout(() => alert('🏐 Открыт пляжный мяч! 165 очков набрано.'), 1000);
-  }
 }
 
-function saveLeader() {
-  const name = document.getElementById('playerName').value.trim() || 'Игрок';
-  save.leaders.push({ name: name, score: score });
+function saveToLeaders() {
+  if (scoreSaved) { alert('Уже сохранено!'); return; }
+  save.leaders.push({ name: save.playerName, score: score, date: Date.now() });
   save.leaders.sort((a, b) => b.score - a.score);
-  save.leaders = save.leaders.slice(0, 5);
+  save.leaders = save.leaders.slice(0, 10);
   writeSave();
-  document.getElementById('nameBlock').classList.add('hidden');
-  alert('Сохранено!');
+  scoreSaved = true;
+  document.getElementById('saveScoreBlock').classList.add('hidden');
+  alert('✅ Результат сохранён в таблицу лидеров!');
 }
 
 // ---------- МАГАЗИН ----------
@@ -391,20 +453,17 @@ function openShop() {
   shopEl.classList.remove('hidden');
   renderShop();
 }
-
 function closeShop() {
   shopEl.classList.add('hidden');
   menuEl.classList.remove('hidden');
   updateBest();
 }
-
 function renderShop() {
   const ballShop = document.getElementById('ballShop');
   const courtShop = document.getElementById('courtShop');
   ballShop.innerHTML = '';
   courtShop.innerHTML = '';
 
-  // Мячи
   for (const key in BALLS) {
     const b = BALLS[key];
     const unlocked = save.unlocked[key];
@@ -413,13 +472,12 @@ function renderShop() {
     div.innerHTML = `
       <div class="preview" style="background:${b.colors[0]}; border-color:${b.colors[1]};"></div>
       <div class="name">${b.name}</div>
-      <div class="info">${unlocked ? (save.ball === key ? '✅ Выбран' : 'Открыт') : '🔒 Нужно ' + b.require + ' очк.'}</div>
+      <div class="info">${unlocked ? (save.ball === key ? '✅ Выбран' : 'Открыт') : '🔒 ' + b.require + ' очков'}</div>
     `;
     if (unlocked) div.onclick = () => { save.ball = key; writeSave(); renderShop(); };
     ballShop.appendChild(div);
   }
 
-  // Площадки
   for (const key in COURTS) {
     const c = COURTS[key];
     const div = document.createElement('div');
@@ -440,23 +498,26 @@ function openLeaders() {
   leadersEl.classList.remove('hidden');
   const list = document.getElementById('leadersList');
   if (save.leaders.length === 0) {
-    list.innerHTML = '<p>Пока пусто. Сыграй матч и установи рекорд!</p>';
+    list.innerHTML = '<p>Пока пусто. Сыграй матч!</p>';
   } else {
-    list.innerHTML = save.leaders.map((l, i) =>
-      `<div>${i + 1}. <b>${l.name}</b> — ${l.score} очк.</div>`
-    ).join('');
+    list.innerHTML = save.leaders.map((l, i) => {
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '.';
+      const me = l.name === save.playerName ? ' me' : '';
+      return `<div class="row-item${me}">
+        <span class="place">${medal}</span>
+        <span class="name">${l.name}</span>
+        <span class="pts">${l.score} очк.</span>
+      </div>`;
+    }).join('');
   }
 }
-
 function closeLeaders() {
   leadersEl.classList.add('hidden');
   menuEl.classList.remove('hidden');
 }
-
 function updateBest() {
   document.getElementById('bestScore').textContent = save.bestScore;
 }
-updateBest();
 
 // ---------- ОБНОВЛЕНИЕ ----------
 function update() {
@@ -480,12 +541,9 @@ function update() {
     const dyh = ball.y - hoop.y;
     if (!scoredThisThrow && Math.abs(dxh) < hoop.r * 0.8 && dyh > -5 && dyh < 25 && ball.vy > 0) {
       score++;
-      save.totalScore++;
       hudEl.textContent = 'Счёт: ' + score;
       spawnConfetti(hoop.x, hoop.y);
       scoredThisThrow = true;
-      writeSave();
-      checkUnlock();
     }
 
     if (Math.abs(ball.vx) < 0.3 && Math.abs(ball.vy) < 0.3 &&
@@ -500,18 +558,15 @@ function update() {
 
 // ---------- РИСОВАНИЕ ----------
 function drawBackground(court) {
-  // Небо
   if (court === 'night') {
     ctx.fillStyle = COURTS.night.sky;
     ctx.fillRect(0, 0, W, H);
-    // Звёзды
     ctx.fillStyle = '#FFF';
     for (let i = 0; i < 50; i++) {
       const sx = (i * 137) % W;
       const sy = (i * 79) % (H * 0.7);
       ctx.fillRect(sx, sy, 2, 2);
     }
-    // Луна
     ctx.fillStyle = '#FFFACD';
     ctx.beginPath();
     ctx.arc(W * 0.15, H * 0.15, 30, 0, Math.PI * 2);
@@ -522,7 +577,6 @@ function drawBackground(court) {
     g.addColorStop(1, '#87CEEB');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
-    // Трибуны
     ctx.fillStyle = '#555';
     ctx.fillRect(0, H * 0.6, W, H * 0.1);
     for (let i = 0; i < 60; i++) {
@@ -530,24 +584,20 @@ function drawBackground(court) {
       ctx.fillRect((i * 23) % W, H * 0.6 + 8 + (i % 3) * 8, 6, 6);
     }
   } else {
-    // Парк
     ctx.fillStyle = '#87CEEB';
     ctx.fillRect(0, 0, W, H);
-    // Солнце
     ctx.fillStyle = '#FFD700';
     ctx.beginPath();
     ctx.arc(W * 0.85, H * 0.12, 35, 0, Math.PI * 2);
     ctx.fill();
-    // Деревья
-    ctx.fillStyle = '#2E8B57';
     for (let i = 0; i < 5; i++) {
       const tx = (i + 1) * (W / 6);
+      ctx.fillStyle = '#2E8B57';
       ctx.beginPath();
       ctx.arc(tx, H * 0.55, 25, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = '#8B4513';
       ctx.fillRect(tx - 5, H * 0.55, 10, H * 0.1);
-      ctx.fillStyle = '#2E8B57';
     }
   }
 }
@@ -564,7 +614,6 @@ function drawBall() {
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // Линии в зависимости от типа мяча
   if (save.ball === 'basket') {
     ctx.beginPath();
     ctx.moveTo(-ball.r, 0); ctx.lineTo(ball.r, 0);
@@ -607,73 +656,16 @@ function draw() {
   const court = COURTS[save.court];
   drawBackground(save.court);
 
-  // Пол
   ctx.fillStyle = court.floor;
   ctx.fillRect(0, H - 40, W, 40);
 
-  // Разметка
   ctx.strokeStyle = 'rgba(255,255,255,0.4)';
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(0, H - 20); ctx.lineTo(W, H - 20);
   ctx.stroke();
 
-  // Стойка
   ctx.strokeStyle = '#666';
   ctx.lineWidth = 8;
   ctx.beginPath();
-  ctx.moveTo(hoop.x + hoop.r + 8, hoop.y);
-  ctx.lineTo(hoop.x + hoop.r + 8, H - 40);
-  ctx.stroke();
-
-  // Кольцо
-  ctx.strokeStyle = court.rim;
-  ctx.lineWidth = 5;
-  ctx.beginPath();
-  ctx.arc(hoop.x, hoop.y, hoop.r, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Сетка
-  ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-  ctx.lineWidth = 2;
-  for (let i = -hoop.r + 8; i < hoop.r; i += 10) {
-    ctx.beginPath();
-    ctx.moveTo(hoop.x + i, hoop.y + hoop.r * 0.5);
-    ctx.lineTo(hoop.x + i * 0.4, hoop.y + hoop.r * 1.4);
-    ctx.stroke();
-  }
-
-  // Прицел
-  if (aiming) {
-    const dx = aimStart.x - aimEnd.x;
-    const dy = aimStart.y - aimEnd.y;
-    const power = 0.18;
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    for (let t = 0; t < 40; t++) {
-      const px = aimStart.x + dx * power * t;
-      const py = aimStart.y + dy * power * t + 0.5 * gravity * t * t;
-      if (px > 0 && px < W && py > 0 && py < H) {
-        ctx.beginPath();
-        ctx.arc(px, py, 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  }
-
-  drawBall();
-  drawConfetti();
-}
-
-function loop() {
-  update();
-  draw();
-  requestAnimationFrame(loop);
-}
-
-resetBall();
-setHoop();
-updateBest();
-loop();
-</script>
-</body>
-</html>
+  ct
